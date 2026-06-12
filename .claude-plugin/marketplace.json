@@ -1,0 +1,20 @@
+{
+  "name": "team",
+  "description": "Single-plugin marketplace for team: agent-to-agent messaging for Claude Code sessions on macOS.",
+  "owner": {
+    "name": "Oliver Schrenk",
+    "url": "https://github.com/oschrenk"
+  },
+  "plugins": [
+    {
+      "name": "team",
+      "description": "Inter-agent messaging for Claude Code sessions on this Mac.",
+      "source": "./",
+      "version": "0.1.0",
+      "category": "productivity",
+      "tags": ["messaging", "agents", "automation", "macos"],
+      "homepage": "https://github.com/oschrenk/team",
+      "license": "MIT"
+    }
+  ]
+}

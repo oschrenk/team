@@ -1,0 +1,14 @@
+{
+  "name": "team",
+  "version": "0.1.0",
+  "description": "Inter-agent messaging for Claude Code sessions on this Mac.",
+  "monitors": "./monitors/monitors.json",
+  "userConfig": {
+    "port": {
+      "type": "number",
+      "title": "Server port",
+      "description": "Localhost port the team bus listens on. Must match the launchd service config.",
+      "default": 9473
+    }
+  }
+}

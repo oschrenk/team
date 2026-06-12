@@ -1,0 +1,82 @@
+version: '3'
+vars:
+  APP_NAME: "team"
+  RELEASE_DIR: "./.release"
+  BUILD_TARGET: "./{{.APP_NAME}}"
+  APP_VERSION:
+    sh: cat VERSION
+tasks:
+  run:
+    cmds:
+      - go run main.go
+    silent: true
+  check:
+    cmds:
+      - staticcheck ./...
+  tidy:
+    cmds:
+      - go mod tidy
+  lint:
+    deps: [check, tidy]
+  build:
+    requires:
+      vars: [BUILD_TARGET]
+    cmds:
+      - go build -v -o "{{.BUILD_TARGET}}"
+    silent: true
+  test:
+    cmds:
+      - go test ./...
+    silent: true
+  install:
+    cmds:
+      - go install
+    silent: true
+  uninstall:
+    cmds:
+      - rm -f ${GOBIN}/{{.APP_NAME}}
+    silent: true
+  artifacts:
+    requires:
+      vars: [APP_NAME, RELEASE_DIR]
+    cmds:
+      - mkdir -p {{.RELEASE_DIR}}
+      - CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -ldflags "-s -w" -v -o {{.RELEASE_DIR}}/{{.APP_NAME}}-darwin-arm64
+      - CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -ldflags "-s -w" -v -o {{.RELEASE_DIR}}/{{.APP_NAME}}-darwin-amd64
+    deps: [tidy]
+  tag:
+    deps: [artifacts]
+    cmds:
+      - git tag "{{.APP_VERSION}}"
+      - git push origin "{{.APP_VERSION}}"
+  sha:
+    silent: true
+    requires:
+      vars: [APP_NAME, RELEASE_DIR]
+    cmds:
+      - |
+        cd {{.RELEASE_DIR}}
+        for f in $(find . -maxdepth 1 -type f -name "{{.APP_NAME}}-*" ! -name "*.sha256"); do
+          sha256sum "$f" | tee "$f.sha256"
+        done
+  release:
+    requires:
+      vars: [APP_NAME, RELEASE_DIR]
+    deps: [tag, sha]
+    cmds:
+      - gh release create --generate-notes "{{.APP_VERSION}}" {{.RELEASE_DIR}}/{{.APP_NAME}}-*
+  smoke:
+    deps: [build]
+    cmds:
+      - bash scripts/smoke.sh
+    silent: false
+  clean:
+    requires:
+      vars: [BUILD_TARGET, RELEASE_DIR]
+    cmds:
+      - rm -rf {{.BUILD_TARGET}}
+      - rm -rf {{.RELEASE_DIR}}
+  updates:
+    # {{` `}} is to escape go templating from go task
+    cmds:
+      - "go list -u -f '{{`{{if (and (not (or .Main .Indirect)) .Update)}}{{.Path}}: {{.Version}} -> {{.Update.Version}}{{end}}`}}' -m all 2> /dev/null"

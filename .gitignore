@@ -1,0 +1,5 @@
+/team
+/.release/
+.direnv/
+.envrc
+tmp/

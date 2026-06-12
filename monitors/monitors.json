@@ -1,0 +1,8 @@
+[
+  {
+    "name": "team-client",
+    "command": "team connect",
+    "description": "team messages",
+    "when": "on-skill-invoke:team"
+  }
+]
