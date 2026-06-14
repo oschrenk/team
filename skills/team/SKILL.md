@@ -103,10 +103,15 @@ When the user invokes `/team [args]`, parse `args` to dispatch:
 
 The team server runs as a launchd user agent. The user must install it
 **once per machine** before any `/team` command can talk to it. If
-`team connect` reports `[team] server not running — run \`team service
-install\``, surface that to the user and stop. Do NOT run
-`team service install` for them — it touches `~/Library/LaunchAgents/`
-and is a one-time setup step, not part of the routine connect flow.
+`team connect` reports `[team] server not running`, surface that to the
+user and tell them to run **either**:
+
+- `brew services start team` (recommended, if they installed via brew)
+- `team service install` (for non-brew setups)
+
+Do NOT run either of those for the user — they touch
+`~/Library/LaunchAgents/` and are a one-time setup step, not part of
+the routine connect flow.
 
 ## connect — start the monitor
 

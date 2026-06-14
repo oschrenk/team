@@ -10,7 +10,7 @@ Go port of [`claude-code-inter-session`](https://github.com/yilunzhang/claude-co
 
 ```
 brew install oschrenk/made/team
-team service install
+brew services start team
 ```
 
 Then in any Claude Code session:
@@ -21,10 +21,14 @@ Then in any Claude Code session:
 /team:team connect
 ```
 
-`team service install` is a one-time machine setup that drops a launchd
-user agent at `~/Library/LaunchAgents/com.oschrenk.team.plist` and
-bootstraps it. The bus then runs in the background until you
-`team service uninstall`.
+`brew services start team` writes
+`~/Library/LaunchAgents/homebrew.mxcl.team.plist` and bootstraps the
+launchd agent. `brew services stop team` undoes it.
+
+If you're not on brew (e.g. nix-only setups), use `team service install`
+instead — same outcome with a self-managed plist at
+`~/Library/LaunchAgents/com.oschrenk.team.plist`. Don't run both: they'd
+collide on port 9473.
 
 Standalone skill install (cleaner `/team` prefix, no `team:team` namespace)
 and other install options live in [docs/install.md](./docs/install.md).

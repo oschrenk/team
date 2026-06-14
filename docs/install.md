@@ -7,10 +7,25 @@ The **machine setup** is the same either way:
 
 ```
 brew install oschrenk/made/team
-team service install    # writes ~/Library/LaunchAgents/com.oschrenk.team.plist
+brew services start team    # writes ~/Library/LaunchAgents/homebrew.mxcl.team.plist
 ```
 
-What differs is how Claude Code finds the skill.
+Lifecycle commands while the service is brew-managed:
+
+```
+brew services stop team       # stop
+brew services restart team    # restart (picks up new version after `brew upgrade`)
+brew services list            # see status
+```
+
+**Not on brew?** Use `team service install` instead — same outcome with
+a self-managed plist at `~/Library/LaunchAgents/com.oschrenk.team.plist`.
+Don't run both: they'd collide on port 9473. `team service` has
+`install` / `uninstall` / `start` / `stop` / `restart` / `status` /
+`logs` subcommands.
+
+What differs between the two skill install paths is how Claude Code
+finds the skill.
 
 ## Plugin install
 
