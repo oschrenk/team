@@ -50,6 +50,7 @@ tasks:
       - git tag "{{.APP_VERSION}}"
       - git push origin "{{.APP_VERSION}}"
   sha:
+    deps: [artifacts]
     silent: true
     requires:
       vars: [APP_NAME, RELEASE_DIR]
