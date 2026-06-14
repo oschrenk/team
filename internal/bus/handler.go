@@ -254,7 +254,9 @@ func (s *Server) helloControl(ctx context.Context, conn *websocket.Conn, hello p
 
 func (s *Server) dispatchLoop(ctx context.Context, state *clientState) {
 	for {
-		_, raw, err := state.conn.Read(ctx)
+		readCtx, cancel := context.WithTimeout(ctx, s.readTimeout)
+		_, raw, err := state.conn.Read(readCtx)
+		cancel()
 		if err != nil {
 			return
 		}

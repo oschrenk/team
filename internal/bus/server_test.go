@@ -34,16 +34,23 @@ func (c *fakeClock) advance(d time.Duration) {
 }
 
 func newHarness(t *testing.T) *harness {
+	return newHarnessOpts(t, 0)
+}
+
+// newHarnessOpts builds a harness with a custom dispatch-loop read
+// timeout. Pass 0 for the production default (protocol.PongTimeout).
+func newHarnessOpts(t *testing.T, readTimeout time.Duration) *harness {
 	t.Helper()
 	t.Setenv("TEAM_DATA_DIR", t.TempDir())
 
 	clock := &fakeClock{t: time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)}
 	var uuidCounter int
 	srv, err := New(Options{
-		Host:  "127.0.0.1",
-		Port:  0,
-		Token: testToken,
-		Now:   clock.now,
+		Host:        "127.0.0.1",
+		Port:        0,
+		Token:       testToken,
+		ReadTimeout: readTimeout,
+		Now:         clock.now,
 		UUIDFunc: func() string {
 			// Counter in the leading chars so [:8] is unique across
 			// sessions (matches what real UUIDs offer).
@@ -570,6 +577,49 @@ func TestPing_Pong(t *testing.T) {
 	op, _ := a.recvOp()
 	if op != protocol.OpPong {
 		t.Fatalf("got %s", op)
+	}
+}
+
+func TestSession_ReapedWhenClientStalls(t *testing.T) {
+	h := newHarnessOpts(t, 75*time.Millisecond)
+	a := h.dial()
+	a.helloAgent("alice", "na")
+
+	if got := len(h.srv.RegistrySnapshot()); got != 1 {
+		t.Fatalf("registry should contain alice after hello; got %d", got)
+	}
+
+	// Go silent. The dispatch-loop read deadline fires, the handler
+	// returns, and the deferred unregister drops alice.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(h.srv.RegistrySnapshot()) == 0 {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatalf("registry not reaped within budget; sessions=%d", len(h.srv.RegistrySnapshot()))
+}
+
+func TestSession_PingKeepsAlive(t *testing.T) {
+	h := newHarnessOpts(t, 150*time.Millisecond)
+	a := h.dial()
+	a.helloAgent("alice", "na")
+
+	// Send pings well under the read timeout, for a duration that
+	// would otherwise reap several times over.
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		a.send(protocol.Ping{Op: protocol.OpPing})
+		op, _ := a.recvOp()
+		if op != protocol.OpPong {
+			t.Fatalf("expected pong, got %s", op)
+		}
+		time.Sleep(40 * time.Millisecond)
+	}
+
+	if got := len(h.srv.RegistrySnapshot()); got != 1 {
+		t.Fatalf("session was reaped despite active pings; got %d", got)
 	}
 }
 

@@ -31,6 +31,12 @@ type Options struct {
 	Port  int
 	Token string
 
+	// ReadTimeout bounds a single dispatch-loop read. Healthy clients
+	// reset it by sending any frame (the ping loop suffices). Zero →
+	// protocol.PongTimeout. Tests inject a short value to exercise
+	// stale-session reaping without waiting 30s.
+	ReadTimeout time.Duration
+
 	Now       func() time.Time
 	UUIDFunc  func() string
 	MsgIDFunc func() string
@@ -54,6 +60,8 @@ type Server struct {
 	now   func() time.Time
 	uuid  func() string
 	msgID func() string
+
+	readTimeout time.Duration
 
 	registryMu sync.Mutex
 	registry   map[string]*clientState // keyed by session_id
@@ -112,6 +120,9 @@ func New(opts Options) (*Server, error) {
 	if opts.MsgIDFunc == nil {
 		opts.MsgIDFunc = newMsgID
 	}
+	if opts.ReadTimeout == 0 {
+		opts.ReadTimeout = protocol.PongTimeout
+	}
 	if opts.Token == "" {
 		if err := paths.SecureDir(paths.DataDir()); err != nil {
 			return nil, err
@@ -129,6 +140,7 @@ func New(opts Options) (*Server, error) {
 		now:              opts.Now,
 		uuid:             opts.UUIDFunc,
 		msgID:            opts.MsgIDFunc,
+		readTimeout:      opts.ReadTimeout,
 		registry:         make(map[string]*clientState),
 		broadcastWindows: make(map[string][]time.Time),
 		startedAt:        opts.Now(),
