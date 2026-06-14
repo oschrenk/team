@@ -1,11 +1,18 @@
 # Development
 
-**Requirements**
+The project is built with [`go-task`](https://taskfile.dev/) inside a
+[Nix flake](./flake.nix).
+
+```
+nix develop
+task build   # → ./team
+task test    # full suite
+```
+
+## Requirements
 
 - [nix](https://nixos.org/) with flakes enabled (provides `go`, `gopls`, `golangci-lint`, `go-task`)
 - [direnv](https://direnv.net/) (optional) — `direnv allow` to auto-load the flake shell
-
-Without direnv, drop into the shell with `nix develop`.
 
 You'll also want `staticcheck` for `task check`:
 

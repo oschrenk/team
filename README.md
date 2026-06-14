@@ -1,14 +1,10 @@
 # team
 
-Agent-to-agent messaging for Claude Code sessions on this Mac. Each
-Claude Code session connects to a local WebSocket bus and can send
-messages to other connected sessions; incoming messages are delivered
-to the receiving agent as prompts and **acted on as instructions by
-default**. One session can drive another.
+Agent-to-agent messaging for Claude Code sessions.
 
-Go port of [`claude-code-inter-session`](https://github.com/yilunzhang/claude-code-inter-session)
-— single static binary, launchd-managed server, with an inspectable bus.
-macOS only.
+Each Claude Code session connects to a local WebSocket bus and can send messages to other connected sessions; incoming messages are delivered to the receiving agent as prompts and **acted on as instructions by default**. One session can drive another.
+
+Go port of [`claude-code-inter-session`](https://github.com/yilunzhang/claude-code-inter-session) (see [docs/comparison.md](./docs/comparison.md)).
 
 ## Quickstart
 
@@ -29,6 +25,9 @@ Then in any Claude Code session:
 user agent at `~/Library/LaunchAgents/com.oschrenk.team.plist` and
 bootstraps it. The bus then runs in the background until you
 `team service uninstall`.
+
+Standalone skill install (cleaner `/team` prefix, no `team:team` namespace)
+and other install options live in [docs/install.md](./docs/install.md).
 
 ## Subcommands
 
@@ -86,37 +85,6 @@ The underlying HTTP API:
 Auth via `Authorization: Bearer <token>` where the token lives at
 `~/.claude/data/team/token` (0600).
 
-## How it differs from the Python upstream
-
-| Aspect            | Python `inter-session`                            | `team` (this)                                 |
-| :---------------- | :------------------------------------------------ | :-------------------------------------------- |
-| Platform          | macOS / Linux / WSL2                              | macOS only                                    |
-| Distribution      | pip + venv re-exec                                | single static Go binary (brew)                |
-| Server lifecycle  | Self-spawning via `bind()`-atomic election        | launchd user agent (`team service install`)   |
-| Idle shutdown     | Configurable minutes                              | None (launchd `KeepAlive=true`)               |
-| Plugin install-deps | Required first run                              | Not needed — single binary                    |
-| Inspection        | Read `messages.log` manually                      | `team inspect` + `/api/*` HTTP endpoints      |
-
-## Security
-
-Same threat model as the upstream:
-
-- Server binds `127.0.0.1` only.
-- Bearer token at `~/.claude/data/team/token` (mode `0600`, directory
-  `0700`). Any process running as the same Unix user can read the token
-  and connect. This is acceptable for single-user, single-machine.
-- Identity check: clients verify the listener's pidfile metadata
-  matches `(pid, host, port)` AND that the pid's cmdline contains
-  `team server` — defense in depth against opportunistic localhost
-  port squatters.
-- The token does **not** protect against malicious code running as your
-  user. If you don't trust local code, don't enable this plugin.
-- The receiving agent's reaction policy (see
-  [SKILL.md](./skills/team/SKILL.md)) treats peer messages as
-  instructions but applies the same caution as user input — destructive
-  ops need explicit affirmative content; ambiguous requests prompt a
-  `question:` clarifier first.
-
 ## Limits
 
 | Limit                          | Value                                       |
@@ -134,14 +102,7 @@ truncation.
 
 ## Development
 
-See [DEVELOPMENT.md](./DEVELOPMENT.md). The project is built with
-[`go-task`](https://taskfile.dev/) inside a [Nix flake](./flake.nix).
-
-```
-nix develop
-task build   # → ./team
-task test    # full suite
-```
+See [DEVELOPMENT.md](./DEVELOPMENT.md).
 
 ## License
 
