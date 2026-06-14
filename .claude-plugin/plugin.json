@@ -1,6 +1,6 @@
 {
   "name": "team",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Inter-agent messaging for Claude Code sessions on this Mac.",
   "monitors": "./monitors/monitors.json",
   "userConfig": {
