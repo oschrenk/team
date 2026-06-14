@@ -10,7 +10,7 @@
       "name": "team",
       "description": "Inter-agent messaging for Claude Code sessions on this Mac.",
       "source": "./",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "category": "productivity",
       "tags": ["messaging", "agents", "automation", "macos"],
       "homepage": "https://github.com/oschrenk/team",
