@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -318,6 +319,87 @@ func TestIntegration_NameTakenAutoRetry(t *testing.T) {
 	if !strings.Contains(outA.String(), "alice-2") {
 		t.Errorf("expected rename diagnostic, got %q", outA.String())
 	}
+}
+
+func TestIntegration_ExitsWhenParentDies(t *testing.T) {
+	h := startIntegrationServer(t)
+	out := &safeBuffer{}
+
+	var parentAlive atomic.Bool
+	parentAlive.Store(true)
+
+	c := New(Options{
+		Host: h.host, Port: h.port,
+		Name: "alice", PPID: 10010,
+		Token: h.token, Out: out, Verbose: true,
+		ParentCheckInterval: 25 * time.Millisecond,
+		AliveCheck:          func(int) bool { return parentAlive.Load() },
+	})
+	t.Cleanup(func() { t.Logf("client out: %s", out.String()) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_ = c.Run(ctx)
+		close(done)
+	}()
+
+	waitFor(t, 2*time.Second, func() bool {
+		st, _ := ReadSessionState(10010)
+		return st != nil && st.Name == "alice"
+	}, "session state file")
+
+	// Simulate parent CC death.
+	parentAlive.Store(false)
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("client did not exit after parent death")
+	}
+	if !strings.Contains(out.String(), "parent pid") {
+		t.Errorf("expected parent-death diagnostic, got %q", out.String())
+	}
+	if st, _ := ReadSessionState(10010); st != nil {
+		t.Errorf("expected session state cleaned up, got %+v", st)
+	}
+}
+
+func TestIntegration_PersistsWhileParentAlive(t *testing.T) {
+	h := startIntegrationServer(t)
+	out := &safeBuffer{}
+
+	c := New(Options{
+		Host: h.host, Port: h.port,
+		Name: "alice", PPID: 10011,
+		Token: h.token, Out: out,
+		ParentCheckInterval: 25 * time.Millisecond,
+		AliveCheck:          func(int) bool { return true },
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan struct{})
+	go func() {
+		_ = c.Run(ctx)
+		close(done)
+	}()
+
+	waitFor(t, 2*time.Second, func() bool {
+		st, _ := ReadSessionState(10011)
+		return st != nil && st.Name == "alice"
+	}, "session state file")
+
+	// Verify the client stays running across many check-intervals.
+	select {
+	case <-done:
+		t.Fatal("client exited despite alive parent")
+	case <-time.After(250 * time.Millisecond):
+	}
+
+	cancel()
+	<-done
 }
 
 // --- raw WS agent helper ---------------------------------------------

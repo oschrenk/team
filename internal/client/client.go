@@ -42,11 +42,18 @@ type Options struct {
 	Verbose             bool
 	MaxCollisionRetries int
 
+	// ParentCheckInterval is how often Run polls AliveCheck against
+	// the resolved Claude ancestor pid. Zero → 5 seconds. Detects the
+	// orphan case where the parent CC process dies and the monitor
+	// gets reparented to init.
+	ParentCheckInterval time.Duration
+
 	// Test seams.
-	Now    func() time.Time
-	Out    io.Writer
-	NewSID func() string
-	Token  string // override for tests; production reads from disk
+	Now        func() time.Time
+	Out        io.Writer
+	NewSID     func() string
+	Token      string             // override for tests; production reads from disk
+	AliveCheck func(pid int) bool // override for tests; defaults to procutil.SafePidAlive
 }
 
 // Client is the long-lived monitor.
@@ -62,6 +69,9 @@ type Client struct {
 	nonce     string
 
 	maxCollisions int
+
+	parentCheckInterval time.Duration
+	aliveCheck          func(pid int) bool
 
 	now func() time.Time
 	out io.Writer
@@ -88,23 +98,31 @@ func New(opts Options) *Client {
 	if opts.MaxCollisionRetries == 0 {
 		opts.MaxCollisionRetries = 3
 	}
+	if opts.ParentCheckInterval == 0 {
+		opts.ParentCheckInterval = 5 * time.Second
+	}
+	if opts.AliveCheck == nil {
+		opts.AliveCheck = procutil.SafePidAlive
+	}
 	sid := opts.NewSID
 	if sid == nil {
 		sid = newUUID
 	}
 	return &Client{
-		host:          opts.Host,
-		port:          opts.Port,
-		name:          opts.Name,
-		label:         opts.Label,
-		ppid:          opts.PPID,
-		verbose:       opts.Verbose,
-		sessionID:     sid(),
-		nonce:         randomNonce(),
-		maxCollisions: opts.MaxCollisionRetries,
-		now:           opts.Now,
-		out:           opts.Out,
-		tok:           opts.Token,
+		host:                opts.Host,
+		port:                opts.Port,
+		name:                opts.Name,
+		label:               opts.Label,
+		ppid:                opts.PPID,
+		verbose:             opts.Verbose,
+		sessionID:           sid(),
+		nonce:               randomNonce(),
+		maxCollisions:       opts.MaxCollisionRetries,
+		parentCheckInterval: opts.ParentCheckInterval,
+		aliveCheck:          opts.AliveCheck,
+		now:                 opts.Now,
+		out:                 opts.Out,
+		tok:                 opts.Token,
 	}
 }
 
@@ -131,10 +149,17 @@ func (c *Client) Run(ctx context.Context) error {
 	defer lock.Close()
 	defer func() { _ = DeleteSessionState(c.ppid) }()
 
+	// Parent-liveness watch: when the resolved CC ancestor dies (we get
+	// reparented to init), cancel and exit. Without this, the monitor
+	// outlives its parent and shows up as a ghost in `team list`.
+	runCtx, cancelRun := context.WithCancel(ctx)
+	defer cancelRun()
+	go c.parentWatch(runCtx, cancelRun)
+
 	backoff := protocol.ReconnectBackoffMin
 	collisions := 0
 	for {
-		err := c.connectAndServe(ctx)
+		err := c.connectAndServe(runCtx)
 		if errors.Is(err, errStopClient) {
 			return nil
 		}
@@ -153,7 +178,7 @@ func (c *Client) Run(ctx context.Context) error {
 			c.printf("[team] connect failed: %v\n", err)
 		}
 		select {
-		case <-ctx.Done():
+		case <-runCtx.Done():
 			return nil
 		default:
 		}
@@ -161,7 +186,7 @@ func (c *Client) Run(ctx context.Context) error {
 		jitter := protocol.ReconnectJitterFrac * float64(backoff)
 		delay := time.Duration(float64(backoff) + (mrand.Float64()*2-1)*jitter)
 		select {
-		case <-ctx.Done():
+		case <-runCtx.Done():
 			return nil
 		case <-time.After(delay):
 		}
@@ -311,6 +336,32 @@ func (c *Client) handleHelloError(raw []byte) error {
 	}
 	c.printf("[team] hello rejected: %s %s\n", e.Code, e.Message)
 	return errStopClient
+}
+
+// parentWatch polls aliveCheck against the resolved CC ancestor pid on
+// a ticker. When the parent dies, it cancels the Run context so the
+// outer loop exits cleanly. A no-op if ppid is non-positive (the
+// resolver fell through to an invalid value).
+func (c *Client) parentWatch(ctx context.Context, cancel context.CancelFunc) {
+	if c.ppid <= 0 {
+		return
+	}
+	ticker := time.NewTicker(c.parentCheckInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if !c.aliveCheck(c.ppid) {
+				if c.verbose {
+					c.printf("[team] parent pid %d gone; exiting\n", c.ppid)
+				}
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 func (c *Client) pingLoop(ctx context.Context, conn *websocket.Conn) {
