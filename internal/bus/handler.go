@@ -161,14 +161,22 @@ func (s *Server) helloAgent(ctx context.Context, conn *websocket.Conn, hello pro
 		}
 	}
 	if rejectCode == "" && hello.Name != "" {
+		taken := make(map[string]bool, len(s.registry))
+		nameInUse := false
 		for _, c := range s.registry {
-			if c.role == protocol.RoleAgent && c.name == hello.Name {
-				rejectCode = protocol.ErrNameTaken
-				rejectMsg = fmt.Sprintf("name %q is taken", hello.Name)
-				rejectCandidates = []string{
-					hello.Name + "-2", hello.Name + "-3", hello.Name + "-4",
-				}
-				break
+			if c.role != protocol.RoleAgent {
+				continue
+			}
+			taken[c.name] = true
+			if c.name == hello.Name {
+				nameInUse = true
+			}
+		}
+		if nameInUse {
+			rejectCode = protocol.ErrNameTaken
+			rejectMsg = fmt.Sprintf("name %q is taken", hello.Name)
+			if next := validate.NextAvailableName(hello.Name, taken); next != "" {
+				rejectCandidates = []string{next}
 			}
 		}
 	}

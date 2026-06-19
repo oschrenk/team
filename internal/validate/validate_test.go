@@ -152,3 +152,78 @@ func TestTruncateForStdout(t *testing.T) {
 		}
 	})
 }
+
+func TestNextAvailableName(t *testing.T) {
+	cases := []struct {
+		name  string
+		base  string
+		taken map[string]bool
+		want  string
+	}{
+		{
+			name:  "base free",
+			base:  "foo",
+			taken: map[string]bool{},
+			want:  "foo",
+		},
+		{
+			name:  "base taken, -2 free",
+			base:  "foo",
+			taken: map[string]bool{"foo": true},
+			want:  "foo-2",
+		},
+		{
+			name:  "base and -2 taken, -3 free",
+			base:  "foo",
+			taken: map[string]bool{"foo": true, "foo-2": true},
+			want:  "foo-3",
+		},
+		{
+			name:  "gap: -2 free, -3 taken",
+			base:  "foo",
+			taken: map[string]bool{"foo": true, "foo-3": true},
+			want:  "foo-2",
+		},
+		{
+			name: "-2 through -9 taken, -10 free",
+			base: "foo",
+			taken: map[string]bool{
+				"foo":   true,
+				"foo-2": true,
+				"foo-3": true,
+				"foo-4": true,
+				"foo-5": true,
+				"foo-6": true,
+				"foo-7": true,
+				"foo-8": true,
+				"foo-9": true,
+			},
+			want: "foo-10",
+		},
+		{
+			name:  "39-char base, -2 would be 41 chars",
+			base:  strings.Repeat("a", 39),
+			taken: map[string]bool{strings.Repeat("a", 39): true},
+			want:  "",
+		},
+		{
+			name:  "38-char base, -2 fits at 40 chars",
+			base:  strings.Repeat("a", 38),
+			taken: map[string]bool{strings.Repeat("a", 38): true},
+			want:  strings.Repeat("a", 38) + "-2",
+		},
+		{
+			name:  "empty base",
+			base:  "",
+			taken: map[string]bool{},
+			want:  "",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NextAvailableName(tc.base, tc.taken); got != tc.want {
+				t.Errorf("NextAvailableName(%q, %v) = %q, want %q", tc.base, tc.taken, got, tc.want)
+			}
+		})
+	}
+}

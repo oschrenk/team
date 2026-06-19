@@ -277,7 +277,33 @@ func TestHello_NameTakenWithCandidates(t *testing.T) {
 	if e.Code != protocol.ErrNameTaken {
 		t.Fatalf("got %s", e.Code)
 	}
-	if len(e.Candidates) != 3 || e.Candidates[0] != "alice-2" {
+	if len(e.Candidates) != 1 || e.Candidates[0] != "alice-2" {
+		t.Fatalf("bad candidates: %v", e.Candidates)
+	}
+}
+
+func TestHello_NameTakenSkipsTakenSuffixes(t *testing.T) {
+	h := newHarness(t)
+	a := h.dial()
+	a.helloAgent("alice", "n1")
+	b := h.dial()
+	b.helloAgent("alice-2", "n2")
+
+	c := h.dial()
+	c.send(protocol.Hello{
+		Op: protocol.OpHello, Name: "alice", Token: testToken,
+		Nonce: "n3", Role: protocol.RoleAgent,
+	})
+	op, raw := c.recvOp()
+	if op != protocol.OpError {
+		t.Fatalf("got %s", op)
+	}
+	var e protocol.Error
+	_ = json.Unmarshal(raw, &e)
+	if e.Code != protocol.ErrNameTaken {
+		t.Fatalf("got %s", e.Code)
+	}
+	if len(e.Candidates) != 1 || e.Candidates[0] != "alice-3" {
 		t.Fatalf("bad candidates: %v", e.Candidates)
 	}
 }

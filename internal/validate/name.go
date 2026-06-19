@@ -6,6 +6,7 @@ package validate
 import (
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -47,4 +48,25 @@ func AutoNameFromCwd(cwd string) string {
 		return ""
 	}
 	return name
+}
+
+// NextAvailableName returns the smallest "<base>-N" with N>=2 not in taken.
+// If base itself is not in taken, returns base unchanged. Returns "" if base
+// is empty or if the next free candidate would exceed the 40-char Name() cap.
+func NextAvailableName(base string, taken map[string]bool) string {
+	if base == "" {
+		return ""
+	}
+	if !taken[base] {
+		return base
+	}
+	for n := 2; ; n++ {
+		candidate := base + "-" + strconv.Itoa(n)
+		if len(candidate) > 40 {
+			return ""
+		}
+		if !taken[candidate] {
+			return candidate
+		}
+	}
 }
